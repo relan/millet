@@ -1,0 +1,61 @@
+#!/usr/bin/expect -f
+#
+# Millet: command line tool for Xiaomi Mi Band
+# Copyright (C) 2017  Andrew Nayenko
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+proc xx2int xxstr {
+	scan [join [lreverse [split $xxstr " "]] ""] "%x" result
+	return $result
+}
+
+proc xx2date xxstr {
+	scan $xxstr "%x %x %x" year month day
+	return [format "%04d-%02d-%02d" [expr $year + 2000] [expr $month + 1] $day]
+}
+
+proc xx2fwver xxstr {
+	scan $xxstr "%x %x %x %x" patch minor major epoch
+	return "$epoch.$major.$minor.$patch"
+}
+
+if {[llength $argv] != 1} {
+	puts "Usage: $argv0 <MAC>"
+	exit 1
+}
+spawn gatttool -I -b "[lindex $argv 0]"
+send "connect\r"
+expect "Connection successful"
+
+# Device info
+send "char-read-uuid ff01\r"
+expect -re "value: .. .. .. .. .. .. .. .. .. .. .. .. (.. .. .. ..)"
+set fwver [xx2fwver $expect_out(1,string)]
+puts "Firmware: $fwver"
+
+# Battery
+send "char-read-uuid ff0c\r"
+expect -re "value: (..) (.. .. ..) .. .. .. (.. ..) .."
+set charge_level   [xx2int  $expect_out(1,string)]
+set charge_date    [xx2date $expect_out(2,string)]
+set charge_cycles  [xx2int  $expect_out(3,string)]
+puts "Battery: $charge_level%, $charge_cycles cycles, last charge $charge_date"
+
+# Steps
+send "char-read-uuid ff06\r"
+expect -re "value: (.. .. .. ..)"
+set steps [xx2int $expect_out(1,string)]
+puts "Steps: $steps"
